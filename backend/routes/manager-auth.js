@@ -5,20 +5,19 @@ import {
   verifyPassword, 
   generateToken, 
   validateEmail, 
-  validatePassword, 
-  validatePhone 
+  validatePassword 
 } from '../auth.js';
 import { run, get } from '../database.js';
 
 const router = express.Router();
 
-// POST /auth/register
+// POST /auth/manager/register
 router.post('/register', async (req, res) => {
   try {
-    const { fullName, companyName, email, phoneNumber, password, confirmPassword } = req.body;
+    const { fullName, email, password, confirmPassword } = req.body;
 
     // Validation
-    if (!fullName || !companyName || !email || !phoneNumber || !password || !confirmPassword) {
+    if (!fullName || !email || !password || !confirmPassword) {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
@@ -32,10 +31,6 @@ router.post('/register', async (req, res) => {
 
     if (!validatePassword(password)) {
       return res.status(400).json({ error: 'Password must be at least 8 characters with uppercase, lowercase, and number' });
-    }
-
-    if (!validatePhone(phoneNumber)) {
-      return res.status(400).json({ error: 'Invalid phone number' });
     }
 
     // Check if email already exists in users table
@@ -52,37 +47,36 @@ router.post('/register', async (req, res) => {
     await run(
       `INSERT INTO users (id, user_role, email, password_hash)
        VALUES (?, ?, ?, ?)`,
-      [userId, 'CUSTOMER', email, passwordHash]
+      [userId, 'SALES_MANAGER', email, passwordHash]
     );
 
-    // Create customer
-    const customerId = uuidv4();
+    // Create manager record
+    const managerId = uuidv4();
     await run(
-      `INSERT INTO customers (id, user_id, full_name, company_name, email, phone_number, password_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [customerId, userId, fullName, companyName, email, phoneNumber, passwordHash]
+      `INSERT INTO sales_managers (id, user_id, full_name, email, password_hash)
+       VALUES (?, ?, ?, ?, ?)`,
+      [managerId, userId, fullName, email, passwordHash]
     );
 
-    // Generate unified token
-    const token = generateToken(userId, 'CUSTOMER', customerId);
+    // Generate token
+    const token = generateToken(userId, 'SALES_MANAGER', managerId);
 
     res.status(201).json({
-      message: 'Registration successful',
+      message: 'Manager registration successful',
       token,
-      customer: {
-        id: customerId,
+      manager: {
+        id: managerId,
         fullName,
-        companyName,
         email
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Manager registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// POST /auth/login
+// POST /auth/manager/login
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -95,8 +89,8 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    // Check user table for CUSTOMER role
-    const user = await get('SELECT * FROM users WHERE email = ? AND user_role = ?', [email, 'CUSTOMER']);
+    // Check user table for SALES_MANAGER role
+    const user = await get('SELECT * FROM users WHERE email = ? AND user_role = ?', [email, 'SALES_MANAGER']);
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -108,36 +102,28 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Get customer details
-    const customer = await get('SELECT id, full_name, company_name, email FROM customers WHERE user_id = ?', [user.id]);
+    // Get manager details
+    const manager = await get('SELECT id, full_name, email FROM sales_managers WHERE user_id = ?', [user.id]);
 
-    if (!customer) {
-      return res.status(401).json({ error: 'Customer profile not found' });
+    if (!manager) {
+      return res.status(401).json({ error: 'Manager profile not found' });
     }
 
-    const token = generateToken(user.id, 'CUSTOMER', customer.id);
+    const token = generateToken(user.id, 'SALES_MANAGER', manager.id);
 
     res.json({
       message: 'Login successful',
       token,
-      customer: {
-        id: customer.id,
-        fullName: customer.full_name,
-        companyName: customer.company_name,
-        email: customer.email
+      manager: {
+        id: manager.id,
+        fullName: manager.full_name,
+        email: manager.email
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Manager login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
-});
-
-// POST /auth/logout (frontend-initiated, backend validates token)
-router.post('/logout', (req, res) => {
-  // Token is invalidated on frontend; backend doesn't maintain a blacklist for simplicity
-  // In production, consider implementing token blacklist
-  res.json({ message: 'Logout successful' });
 });
 
 export default router;

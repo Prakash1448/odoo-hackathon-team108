@@ -4,8 +4,12 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import { initializeDatabase } from './database.js';
 import authRoutes from './routes/auth.js';
+import salespersonAuthRoutes from './routes/salesperson-auth.js';
+import managerAuthRoutes from './routes/manager-auth.js';
+import managerRoutes from './routes/manager.js';
 import customerRoutes from './routes/customer.js';
 import quotationRoutes from './routes/quotation.js';
+import salespersonRoutes from './routes/salesperson.js';
 
 dotenv.config();
 
@@ -23,8 +27,12 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/auth/salesperson', salespersonAuthRoutes);
+app.use('/auth/manager', managerAuthRoutes);
 app.use('/customer', customerRoutes);
 app.use('/quotations', quotationRoutes);
+app.use('/salesperson', salespersonRoutes);
+app.use('/manager', managerRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

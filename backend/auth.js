@@ -13,8 +13,14 @@ export async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
-export function generateToken(customerId) {
-  return jwt.sign({ customerId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+// Unified token generation supporting all roles
+export function generateToken(userId, role, roleId) {
+  return jwt.sign({ userId, role, roleId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
+// Legacy functions - kept for backward compatibility
+export function generateSalespersonToken(salespersonId) {
+  return jwt.sign({ salespersonId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 }
 
 export function verifyToken(token) {
@@ -25,6 +31,7 @@ export function verifyToken(token) {
   }
 }
 
+// Unified auth middleware supporting all roles
 export const authMiddleware = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -38,15 +45,95 @@ export const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    // Fetch customer to ensure they still exist
-    const customer = await get('SELECT id, full_name, company_name, email FROM customers WHERE id = ?', [decoded.customerId]);
+    // Support both new unified tokens and legacy tokens
+    if (decoded.role === 'CUSTOMER' || decoded.customerId) {
+      const customerId = decoded.roleId || decoded.customerId;
+      const customer = await get('SELECT id, full_name, company_name, email FROM customers WHERE id = ?', [customerId]);
+      
+      if (!customer) {
+        return res.status(401).json({ error: 'Customer not found' });
+      }
+
+      req.customer = customer;
+      req.customerId = customerId;
+      req.userType = 'customer';
+      req.userId = decoded.userId;
+      req.userRole = 'CUSTOMER';
+      next();
+    } else {
+      return res.status(403).json({ error: 'Invalid user role for this endpoint' });
+    }
+  } catch (error) {
+    res.status(401).json({ error: 'Authentication failed' });
+  }
+};
+
+// Salesperson middleware - updated to support unified tokens
+export const salespersonAuthMiddleware = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
     
-    if (!customer) {
-      return res.status(401).json({ error: 'Customer not found' });
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
     }
 
-    req.customer = customer;
-    req.customerId = decoded.customerId;
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Support both new unified tokens and legacy tokens
+    if (decoded.role === 'SALESPERSON' || decoded.salespersonId) {
+      const salespersonId = decoded.roleId || decoded.salespersonId;
+      const salesperson = await get('SELECT id, full_name, email, max_discount_percent FROM salespersons WHERE id = ?', [salespersonId]);
+      
+      if (!salesperson) {
+        return res.status(401).json({ error: 'Salesperson not found' });
+      }
+
+      req.salesperson = salesperson;
+      req.salespersonId = salespersonId;
+      req.userType = 'salesperson';
+      req.userId = decoded.userId;
+      req.userRole = 'SALESPERSON';
+      next();
+    } else {
+      return res.status(403).json({ error: 'Invalid user role for this endpoint' });
+    }
+  } catch (error) {
+    res.status(401).json({ error: 'Authentication failed' });
+  }
+};
+
+// Sales Manager middleware
+export const managerAuthMiddleware = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    if (decoded.role !== 'SALES_MANAGER') {
+      return res.status(403).json({ error: 'Manager role required' });
+    }
+
+    const manager = await get('SELECT id, full_name, email FROM sales_managers WHERE id = ?', [decoded.roleId]);
+    
+    if (!manager) {
+      return res.status(401).json({ error: 'Manager not found' });
+    }
+
+    req.manager = manager;
+    req.managerId = decoded.roleId;
+    req.userId = decoded.userId;
+    req.userRole = 'SALES_MANAGER';
+    req.userType = 'manager';
     next();
   } catch (error) {
     res.status(401).json({ error: 'Authentication failed' });

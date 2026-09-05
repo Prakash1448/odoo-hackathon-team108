@@ -10,16 +10,35 @@ import RequestDetail from './pages/RequestDetail';
 import Quotations from './pages/Quotations';
 import QuotationDetail from './pages/QuotationDetail';
 import Profile from './pages/Profile';
+import SalespersonLogin from './pages/SalespersonLogin';
+import SalespersonRegister from './pages/SalespersonRegister';
+import SalespersonDashboard from './pages/SalespersonDashboard';
+import SalespersonRequestsList from './pages/SalespersonRequestsList';
+import SalespersonRequestDetail from './pages/SalespersonRequestDetail';
+import SalespersonQuotations from './pages/SalespersonQuotations';
+import SalespersonQuotationDetail from './pages/SalespersonQuotationDetail';
+import SalespersonDiscountRequests from './pages/SalespersonDiscountRequests';
+import ManagerLogin from './pages/ManagerLogin';
+import ManagerDashboard from './pages/ManagerDashboard';
+import ManagerApprovalRequests from './pages/ManagerApprovalRequests';
+import ManagerApprovalDetail from './pages/ManagerApprovalDetail';
 
 export default function App() {
   return (
     <Router>
       <Routes>
-        {/* Public routes */}
+        {/* Public routes - Customer */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* Protected routes */}
+        {/* Public routes - Salesperson */}
+        <Route path="/salesperson/login" element={<SalespersonLogin />} />
+        <Route path="/salesperson/register" element={<SalespersonRegister />} />
+
+        {/* Public routes - Manager */}
+        <Route path="/manager/login" element={<ManagerLogin />} />
+
+        {/* Protected routes - Customer */}
         <Route
           path="/dashboard"
           element={
@@ -83,8 +102,91 @@ export default function App() {
           }
         />
 
+        {/* Protected routes - Salesperson */}
+        <Route
+          path="/salesperson/dashboard"
+          element={
+            <PrivateRoute>
+              <SalespersonDashboard />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/salesperson/requests"
+          element={
+            <PrivateRoute>
+              <SalespersonRequestsList />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/salesperson/requests/:requestId"
+          element={
+            <PrivateRoute>
+              <SalespersonRequestDetail />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/salesperson/quotations"
+          element={
+            <PrivateRoute>
+              <SalespersonQuotations />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/salesperson/quotations/:quotationId"
+          element={
+            <PrivateRoute>
+              <SalespersonQuotationDetail />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/salesperson/discount-requests"
+          element={
+            <PrivateRoute>
+              <SalespersonDiscountRequests />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Protected routes - Manager */}
+        <Route
+          path="/manager/dashboard"
+          element={
+            <PrivateRoute>
+              <ManagerDashboard />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/manager/approval-requests"
+          element={
+            <PrivateRoute>
+              <ManagerApprovalRequests />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/manager/approval-requests/:requestId"
+          element={
+            <PrivateRoute>
+              <ManagerApprovalDetail />
+            </PrivateRoute>
+          }
+        />
+
         {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );
