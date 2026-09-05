@@ -11,3 +11,10 @@ class NegotiationMessage(BaseModel):
     date: str
     proposedDiscount: Optional[float] = None
     proposedAmount: Optional[float] = None
+
+class OrderRequestItem(BaseModel):
+    productId: str
+    quantity: int
+
+class OrderRequestCreate(BaseModel):
+    items: List[OrderRequestItem]

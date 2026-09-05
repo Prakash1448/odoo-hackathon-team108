@@ -11,6 +11,10 @@ export function RoleBasedRoute({ allowedRoles, children }) {
     return <Navigate to="/login" replace />;
   }
 
-  // Grant access to all logged in users to avoid Access Denied screens
+  // Enforce role-based access control
+  if (!allowedRoles || !allowedRoles.includes(user.role)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
   return children;
 }

@@ -4,7 +4,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { RoleBasedRoute } from "./routes/RoleBasedRoute";
 import { AppShell } from "./layouts/AppShell";
-import { Dashboard } from "./pages/Dashboard";
+import { Home } from "./pages/Home";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/auth/Login";
 import { Signup } from "./pages/auth/Signup";
@@ -28,6 +28,8 @@ import { InvoicesList } from "./pages/invoices/InvoicesList";
 import { InvoiceDetail } from "./pages/invoices/InvoiceDetail";
 import { CustomerDashboard } from "./pages/portal/CustomerDashboard";
 import { CustomerNegotiation } from "./pages/portal/CustomerNegotiation";
+import { CustomerInvoicesList } from "./pages/portal/CustomerInvoicesList";
+import { CustomerOrderRequest } from "./pages/portal/CustomerOrderRequest";
 import { DealHealth } from "./pages/analytics/DealHealth";
 import { Reports } from "./pages/analytics/Reports";
 
@@ -49,8 +51,8 @@ function App() {
             {/* Protected Routes */}
             <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route index element={
-                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin"]}>
-                  <Dashboard />
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin", "customer"]}>
+                  <Home />
                 </RoleBasedRoute>
               } />
               
@@ -128,6 +130,16 @@ function App() {
               <Route path="portal/negotiate/:id" element={
                 <RoleBasedRoute allowedRoles={["customer"]}>
                   <CustomerNegotiation />
+                </RoleBasedRoute>
+              } />
+              <Route path="portal/invoices" element={
+                <RoleBasedRoute allowedRoles={["customer"]}>
+                  <CustomerInvoicesList />
+                </RoleBasedRoute>
+              } />
+              <Route path="portal/requests/create" element={
+                <RoleBasedRoute allowedRoles={["customer"]}>
+                  <CustomerOrderRequest />
                 </RoleBasedRoute>
               } />
 

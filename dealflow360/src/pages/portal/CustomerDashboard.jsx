@@ -7,30 +7,161 @@ import { Button } from "../../components/ui/Button";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { useAuth } from "../../context/AuthContext";
 import { portalService } from "../../services/portalService";
+import { Plus, FileText, ShoppingCart, RefreshCw } from "lucide-react";
 
 export function CustomerDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [myQuotes, setMyQuotes] = useState([]);
+  const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    portalService.getQuotes()
-      .then(data => setMyQuotes(Array.isArray(data) ? data : []))
-      .catch(err => console.error("Portal load error:", err))
-      .finally(() => setLoading(false));
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const [quotes, requests] = await Promise.all([
+        portalService.getQuotes(),
+        portalService.getOrderRequests(),
+      ]);
+      
+      setMyQuotes(Array.isArray(quotes) ? quotes : []);
+      setMyRequests(Array.isArray(requests) ? requests : []);
+    } catch (err) {
+      console.error("Portal load error:", err);
+      setError(err.message || "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <PageHeader 
-        title={`Welcome back, ${user.company || "Customer"}`} 
-        description="Review your active quotations and manage your subscriptions." 
-      />
+      <div className="flex justify-between items-center">
+        <PageHeader 
+          title={`Welcome back, ${user.company || "Customer"}`} 
+          description="Manage your quotations, order requests, and invoices." 
+        />
+        <Button onClick={fetchData} disabled={loading} className="gap-2">
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "Loading..." : "Refresh"}
+        </Button>
+      </div>
 
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4 text-red-700 text-sm">
+            {error}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/portal/requests/create")}>
+          <CardContent className="p-6 text-center">
+            <ShoppingCart className="h-8 w-8 text-indigo-600 mx-auto mb-2" />
+            <h3 className="font-semibold text-slate-900">Create Order Request</h3>
+            <p className="text-sm text-slate-500 mt-1">Tell us what you need</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/portal/invoices")}>
+          <CardContent className="p-6 text-center">
+            <FileText className="h-8 w-8 text-green-600 mx-auto mb-2" />
+            <h3 className="font-semibold text-slate-900">View Invoices</h3>
+            <p className="text-sm text-slate-500 mt-1">See your billing history</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="flex justify-center gap-4">
+              <div>
+                <div className="text-2xl font-bold text-slate-900">{myQuotes.length}</div>
+                <p className="text-sm text-slate-500">Quotations</p>
+              </div>
+              <div className="border-l"></div>
+              <div>
+                <div className="text-2xl font-bold text-slate-900">{myRequests.length}</div>
+                <p className="text-sm text-slate-500">Requests</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Order Requests Section */}
+      {myRequests.length > 0 && (
+        <Card>
+          <div className="border-b border-slate-100 p-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-indigo-600" />
+              Your Order Requests
+            </h2>
+            <Button variant="outline" size="sm" onClick={() => navigate("/portal/requests/create")} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New Request
+            </Button>
+          </div>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Request ID</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {myRequests.map(request => (
+                  <TableRow key={request.id}>
+                    <TableCell className="font-medium text-indigo-600">{request.id}</TableCell>
+                    <TableCell className="text-sm text-slate-500">
+                      {new Date(request.date || request.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {request.items?.length || 0} {request.items?.length === 1 ? "item" : "items"}
+                    </TableCell>
+                    <TableCell className="font-semibold">${request.amount?.toLocaleString()}</TableCell>
+                    <TableCell>
+                      <span className="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-700">
+                        {request.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="outline"
+                        size="sm" 
+                        onClick={() => navigate(`/portal/negotiate/${request.id}`)}
+                      >
+                        View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quotations Section */}
       <Card>
-        <div className="border-b border-slate-100 p-4">
-          <h2 className="text-lg font-semibold text-slate-900">Your Quotations</h2>
+        <div className="border-b border-slate-100 p-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <FileText className="h-5 w-5 text-green-600" />
+            Your Quotations
+          </h2>
         </div>
         <CardContent className="p-0">
           <Table>
@@ -38,31 +169,50 @@ export function CustomerDashboard() {
               <TableRow>
                 <TableHead>Quote ID</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Items</TableHead>
                 <TableHead>Total Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {myQuotes.map(quote => (
-                <TableRow key={quote.id}>
-                  <TableCell className="font-medium text-indigo-600">{quote.id}</TableCell>
-                  <TableCell className="text-sm text-slate-500">{new Date(quote.date || quote.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell className="font-semibold">${quote.amount?.toLocaleString()}</TableCell>
-                  <TableCell><StatusBadge status={quote.status} /></TableCell>
-                  <TableCell className="text-right">
+              {myQuotes
+                .filter(q => q.status !== "Draft") // Don't show draft requests here
+                .map(quote => (
+                  <TableRow key={quote.id}>
+                    <TableCell className="font-medium text-indigo-600">{quote.id}</TableCell>
+                    <TableCell className="text-sm text-slate-500">
+                      {new Date(quote.date || quote.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {quote.items?.length || 0} {quote.items?.length === 1 ? "item" : "items"}
+                    </TableCell>
+                    <TableCell className="font-semibold">${quote.amount?.toLocaleString()}</TableCell>
+                    <TableCell><StatusBadge status={quote.status} /></TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant={quote.status === "Sent" ? "default" : "outline"}
+                        size="sm" 
+                        onClick={() => navigate(`/portal/negotiate/${quote.id}`)}
+                      >
+                        {quote.status === "Sent" ? "Review Quote" : "View Details"}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              {myQuotes.filter(q => q.status !== "Draft").length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                    You have no active quotations. <br />
                     <Button 
-                      variant={quote.status === "Sent" ? "default" : "outline"}
-                      size="sm" 
-                      onClick={() => navigate(`/portal/negotiate/${quote.id}`)}
+                      variant="link" 
+                      onClick={() => navigate("/portal/requests/create")}
+                      className="mt-2"
                     >
-                      {quote.status === "Sent" ? "Review Quote" : "View Details"}
+                      Create an order request
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
-              {myQuotes.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-slate-500">You have no active quotations.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
