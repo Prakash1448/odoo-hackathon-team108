@@ -27,12 +27,14 @@ export default function ManagerLogin() {
 
     try {
       const response = await managerAuthAPI.login(formData);
-      localStorage.setItem('authToken', response.data.token);
-      localStorage.setItem('userRole', 'SALES_MANAGER');
+      localStorage.setItem('authToken', response.data.access_token || response.data.token);
+      localStorage.setItem('userRole', response.data.user?.role || 'SALES_MANAGER');
       localStorage.setItem('manager', JSON.stringify(response.data.manager));
       navigate('/manager/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.response
+        ? err.response.data?.error || 'Invalid email or password'
+        : 'Unable to connect to server');
     } finally {
       setLoading(false);
     }
@@ -50,9 +52,10 @@ export default function ManagerLogin() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Email Address</label>
+            <label htmlFor="email">Email Address</label>
             <input
               type="email"
+              id="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
@@ -62,9 +65,10 @@ export default function ManagerLogin() {
           </div>
 
           <div className="form-group">
-            <label>Password</label>
+            <label htmlFor="password">Password</label>
             <input
               type="password"
+              id="password"
               name="password"
               value={formData.password}
               onChange={handleChange}

@@ -69,6 +69,14 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       message: 'Registration successful',
       token,
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        id: userId,
+        name: fullName,
+        email,
+        role: 'CUSTOMER'
+      },
       customer: {
         id: customerId,
         fullName,
@@ -120,6 +128,14 @@ router.post('/login', async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        id: customer.id,
+        name: customer.full_name,
+        email: customer.email,
+        role: 'CUSTOMER'
+      },
       customer: {
         id: customer.id,
         fullName: customer.full_name,

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
-import { initializeDatabase } from './database.js';
+import { getDatabase, initializeDatabase } from './database.js';
 import authRoutes from './routes/auth.js';
 import salespersonAuthRoutes from './routes/salesperson-auth.js';
 import managerAuthRoutes from './routes/manager-auth.js';
@@ -35,8 +35,20 @@ app.use('/salesperson', salespersonRoutes);
 app.use('/manager', managerRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    const database = await getDatabase();
+    await database.query('SELECT 1');
+    res.json({
+      status: 'OK',
+      api: 'running',
+      mysql: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Health check database error:', error);
+    res.status(503).json({ status: 'ERROR', api: 'running', mysql: 'disconnected' });
+  }
 });
 
 // Error handling middleware

@@ -64,6 +64,14 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       message: 'Manager registration successful',
       token,
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        id: managerId,
+        name: fullName,
+        email,
+        role: 'SALES_MANAGER'
+      },
       manager: {
         id: managerId,
         fullName,
@@ -114,6 +122,14 @@ router.post('/login', async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        id: manager.id,
+        name: manager.full_name,
+        email: manager.email,
+        role: 'SALES_MANAGER'
+      },
       manager: {
         id: manager.id,
         fullName: manager.full_name,

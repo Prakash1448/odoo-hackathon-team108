@@ -24,8 +24,16 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('authToken');
+      localStorage.removeItem('salespersonToken');
       localStorage.removeItem('customer');
-      window.location.href = '/login';
+      localStorage.removeItem('salesperson');
+      localStorage.removeItem('manager');
+      const path = window.location.pathname;
+      window.location.href = path.startsWith('/salesperson')
+        ? '/salesperson/login'
+        : path.startsWith('/manager')
+          ? '/manager/login'
+          : '/login';
     }
     return Promise.reject(error);
   }
@@ -85,13 +93,14 @@ export const managerAuthAPI = {
   logout: () => api.post('/auth/manager/logout')
 };
 
-// Manager endpoints (to be implemented)
+// Manager endpoints
 export const managerAPI = {
   getDashboard: () => api.get('/manager/dashboard'),
-  getApprovalRequests: () => api.get('/manager/approval-requests'),
-  getApprovalRequest: (requestId) => api.get(`/manager/approval-requests/${requestId}`),
-  approveDis count: (requestId, data) => api.post(`/manager/discount-requests/${requestId}/approve`, data),
-  rejectDiscount: (requestId, data) => api.post(`/manager/discount-requests/${requestId}/reject`, data)
+  getDiscountRequests: () => api.get('/manager/discount-requests'),
+  getDiscountRequest: (discountRequestId) => api.get(`/manager/discount-requests/${discountRequestId}`),
+  approveDiscount: (discountRequestId, data) => api.post(`/manager/discount-requests/${discountRequestId}/approve`, data),
+  rejectDiscount: (discountRequestId, data) => api.post(`/manager/discount-requests/${discountRequestId}/reject`, data),
+  counterOfferDiscount: (discountRequestId, data) => api.post(`/manager/discount-requests/${discountRequestId}/counter-offer`, data)
 };
 
 export default api;

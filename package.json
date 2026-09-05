@@ -8,6 +8,7 @@
     "server": "node backend/server.js",
     "server:watch": "node --watch backend/server.js",
     "test:data": "node backend/scripts/addTestData.js",
+    "seed:demo": "node backend/scripts/seedDemoUsers.js",
     "test:e2e": "node e2e-test.js"
   },
   "dependencies": {

@@ -1,55 +1,49 @@
 import mysql from 'mysql2/promise';
-import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-let pool = null;
-
-function databaseConfig(includeDatabase = true) {
+async function migrateDatabase() {
   const config = {
-    host: process.env.MYSQL_HOST || process.env.DB_HOST || 'localhost',
-    port: process.env.MYSQL_PORT || process.env.DB_PORT || 3306,
-    user: process.env.MYSQL_USER || process.env.DB_USER || 'root',
-    password: process.env.MYSQL_PASSWORD ?? process.env.DB_PASSWORD
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'dealflow360'
   };
 
-  if (includeDatabase) {
-    config.database = process.env.MYSQL_DATABASE || process.env.DB_NAME || 'dealflow360';
-  }
-
-  return config;
-}
-
-export async function getDatabase() {
-  if (!pool) {
-    // First connect without database to create it
-    const initialConnection = await mysql.createConnection(databaseConfig(false));
-
-    // Create database if it doesn't exist
-    const databaseName = process.env.MYSQL_DATABASE || process.env.DB_NAME || 'dealflow360';
-    await initialConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${databaseName}\``);
-    await initialConnection.end();
-
-    // Now create pool with database
-    pool = await mysql.createPool({
-      ...databaseConfig(),
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
-    });
-
-    console.log('MySQL Pool created successfully');
-  }
-  return pool;
-}
-
-export async function initializeDatabase() {
-  const pool = await getDatabase();
-  const connection = await pool.getConnection();
+  const connection = await mysql.createConnection(config);
 
   try {
-    // Unified Users table (for role-based access)
+    console.log('Starting database migration...');
+
+    // Drop existing tables in reverse order of dependencies
+    const tablesToDrop = [
+      'quotation_acceptances',
+      'discount_requests',
+      'quotation_line_items',
+      'quotations',
+      'sales_requests',
+      'discount_limits',
+      'audit_logs',
+      'sales_managers',
+      'salespersons',
+      'customers',
+      'users'
+    ];
+
+    for (const table of tablesToDrop) {
+      try {
+        await connection.execute(`DROP TABLE IF EXISTS \`${table}\``);
+        console.log(`✓ Dropped table: ${table}`);
+      } catch (error) {
+        console.error(`Error dropping ${table}:`, error.message);
+      }
+    }
+
+    console.log('\nCreating fresh tables...');
+
+    // Create unified Users table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(36) PRIMARY KEY,
@@ -62,8 +56,9 @@ export async function initializeDatabase() {
         INDEX idx_role (user_role)
       )
     `);
+    console.log('✓ Created users table');
 
-    // Customers table
+    // Create Customers table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS customers (
         id VARCHAR(36) PRIMARY KEY,
@@ -79,8 +74,9 @@ export async function initializeDatabase() {
         INDEX idx_user (user_id)
       )
     `);
+    console.log('✓ Created customers table');
 
-    // Salespersons table
+    // Create Salespersons table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS salespersons (
         id VARCHAR(36) PRIMARY KEY,
@@ -95,8 +91,9 @@ export async function initializeDatabase() {
         INDEX idx_user (user_id)
       )
     `);
+    console.log('✓ Created salespersons table');
 
-    // Sales Managers table
+    // Create Sales Managers table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS sales_managers (
         id VARCHAR(36) PRIMARY KEY,
@@ -110,8 +107,9 @@ export async function initializeDatabase() {
         INDEX idx_user (user_id)
       )
     `);
+    console.log('✓ Created sales_managers table');
 
-    // Sales Requests table
+    // Create Sales Requests table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS sales_requests (
         id VARCHAR(50) PRIMARY KEY,
@@ -133,8 +131,9 @@ export async function initializeDatabase() {
         INDEX idx_status (status)
       )
     `);
+    console.log('✓ Created sales_requests table');
 
-    // Quotations table
+    // Create Quotations table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS quotations (
         id VARCHAR(36) PRIMARY KEY,
@@ -160,8 +159,9 @@ export async function initializeDatabase() {
         INDEX idx_status (quotation_status)
       )
     `);
+    console.log('✓ Created quotations table');
 
-    // Quotation Line Items table
+    // Create Quotation Line Items table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS quotation_line_items (
         id VARCHAR(36) PRIMARY KEY,
@@ -178,8 +178,9 @@ export async function initializeDatabase() {
         INDEX idx_quotation (quotation_id)
       )
     `);
+    console.log('✓ Created quotation_line_items table');
 
-    // Discount Requests table
+    // Create Discount Requests table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS discount_requests (
         id VARCHAR(36) PRIMARY KEY,
@@ -210,8 +211,9 @@ export async function initializeDatabase() {
         INDEX idx_manager_approval (requires_manager_approval)
       )
     `);
+    console.log('✓ Created discount_requests table');
 
-    // Quotation Acceptances table
+    // Create Quotation Acceptances table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS quotation_acceptances (
         id VARCHAR(36) PRIMARY KEY,
@@ -225,8 +227,9 @@ export async function initializeDatabase() {
         INDEX idx_customer (customer_id)
       )
     `);
+    console.log('✓ Created quotation_acceptances table');
 
-    // Audit Logs table
+    // Create Audit Logs table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS audit_logs (
         id VARCHAR(36) PRIMARY KEY,
@@ -243,8 +246,9 @@ export async function initializeDatabase() {
         INDEX idx_created (created_at)
       )
     `);
+    console.log('✓ Created audit_logs table');
 
-    // Discount Limits Configuration table
+    // Create Discount Limits Configuration table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS discount_limits (
         id VARCHAR(36) PRIMARY KEY,
@@ -255,61 +259,17 @@ export async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
+    console.log('✓ Created discount_limits table');
 
-    console.log('MySQL tables initialized successfully');
+    console.log('\n✓ Database migration completed successfully!');
+    console.log('\nYou can now restart the server.');
+
   } catch (error) {
-    console.error('Error initializing database:', error);
-    throw error;
+    console.error('Migration error:', error);
+    process.exit(1);
   } finally {
-    connection.release();
+    await connection.end();
   }
 }
 
-export async function run(sql, params = []) {
-  const pool = await getDatabase();
-  const connection = await pool.getConnection();
-
-  try {
-    const [result] = await connection.execute(sql, params);
-    return { lastID: result.insertId, changes: result.affectedRows };
-  } catch (error) {
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
-export async function get(sql, params = []) {
-  const pool = await getDatabase();
-  const connection = await pool.getConnection();
-
-  try {
-    const [rows] = await connection.execute(sql, params);
-    return rows.length > 0 ? rows[0] : null;
-  } catch (error) {
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
-export async function all(sql, params = []) {
-  const pool = await getDatabase();
-  const connection = await pool.getConnection();
-
-  try {
-    const [rows] = await connection.execute(sql, params);
-    return rows || [];
-  } catch (error) {
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
-export async function closeDatabase() {
-  if (pool) {
-    await pool.end();
-    pool = null;
-  }
-}
+migrateDatabase();

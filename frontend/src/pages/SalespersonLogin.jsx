@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { salespersonAuthAPI } from '../api';
 import '../styles/Auth.css';
 
 export default function SalespersonLogin() {
@@ -27,22 +27,23 @@ export default function SalespersonLogin() {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:5000/auth/salesperson/login', {
-        email: formData.email,
-        password: formData.password
-      });
+      const response = await salespersonAuthAPI.login(formData);
 
-      const { token, salesperson } = response.data;
+      const token = response.data.access_token || response.data.token;
+      const salesperson = response.data.salesperson;
       
       // Store token and salesperson info
       localStorage.setItem('salespersonToken', token);
       localStorage.setItem('salesperson', JSON.stringify(salesperson));
+      localStorage.setItem('userRole', salesperson.role || 'SALESPERSON');
       localStorage.setItem('userType', 'salesperson');
 
       // Redirect to salesperson dashboard
       navigate('/salesperson/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please try again.');
+      setError(err.response
+        ? err.response.data?.error || 'Invalid email or password'
+        : 'Unable to connect to server');
     } finally {
       setLoading(false);
     }

@@ -4,7 +4,6 @@ import {
   hashPassword, 
   verifyPassword, 
   generateToken,
-  generateSalespersonToken, 
   validateEmail, 
   validatePassword
 } from '../auth.js';
@@ -65,6 +64,14 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       message: 'Registration successful',
       token,
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        id: salespersonId,
+        name: fullName,
+        email,
+        role: 'SALESPERSON'
+      },
       salesperson: {
         id: salespersonId,
         fullName,
@@ -116,6 +123,14 @@ router.post('/login', async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        id: salesperson.id,
+        name: salesperson.full_name,
+        email: salesperson.email,
+        role: 'SALESPERSON'
+      },
       salesperson: {
         id: salesperson.id,
         fullName: salesperson.full_name,

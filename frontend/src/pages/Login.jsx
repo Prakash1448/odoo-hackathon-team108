@@ -26,11 +26,20 @@ export default function Login() {
 
     try {
       const response = await authAPI.login(formData);
-      localStorage.setItem('authToken', response.data.token);
+      const token = response.data.access_token || response.data.token;
+      const user = response.data.user || {
+        ...response.data.customer,
+        role: 'CUSTOMER'
+      };
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('userRole', user.role);
+      localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('customer', JSON.stringify(response.data.customer));
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.response
+        ? err.response.data?.error || 'Invalid email or password'
+        : 'Unable to connect to server');
     } finally {
       setLoading(false);
     }
@@ -50,9 +59,10 @@ export default function Login() {
 
         <form onSubmit={handleSubmit}>
           <div style={styles.formGroup}>
-            <label>Email *</label>
+            <label htmlFor="email">Email *</label>
             <input
               type="email"
+              id="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
@@ -62,9 +72,10 @@ export default function Login() {
           </div>
 
           <div style={styles.formGroup}>
-            <label>Password *</label>
+            <label htmlFor="password">Password *</label>
             <input
               type="password"
+              id="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
