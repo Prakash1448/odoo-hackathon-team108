@@ -59,34 +59,53 @@ class NegotiationService:
         )
         db.add(log_entry)
 
-        # Check if counter-offer discount requires manager approval
-        tier = quote.customer.tier if quote.customer else None
-        tier_max = tier.max_auto_approval_discount if tier else Decimal("15.00")
+        # Import QuoteService to use full approval rule evaluation
+        from app.services.quote_service import QuoteService
+        
+        # Use full ApprovalRule evaluation (not just hardcoded 20% threshold)
+        # Recalculate margin with proposed discount
+        current_margin_pct = Decimal(str(quote.margin))
+        if quote.amount > 0:
+            # If discount changes, margin changes
+            # New amount at proposed discount
+            new_amount = original_base - (original_base * (disc_dec / Decimal("100.00")))
+            new_cost = Decimal(str(quote.cost))
+            new_margin = ((new_amount - new_cost) / new_amount * Decimal("100.00")) if new_amount > 0 else Decimal("0.00")
+        else:
+            new_margin = current_margin_pct
 
-        if disc_dec > Decimal("20.00") or disc_dec > tier_max:
+        # Evaluate approval rules using proposed discount and resulting margin
+        eval_result = QuoteService.evaluate_approval_rules(
+            db, quote.customer, disc_dec, new_margin, proposed_total
+        )
+
+        # Update quote with negotiated discount
+        quote.customer_proposed_discount = disc_dec
+        quote.updated_at = datetime.utcnow()
+
+        if eval_result["is_approval_required"]:
             quote.status = "Pending Approval"
             # Create or update approval record
             approval = Approval(
                 id=f"app-neg-{uuid.uuid4().hex[:6]}",
                 quote_id=quote.id,
                 requested_by_user_id=current_user.id,
-                required_role="sales-manager",
+                required_role=eval_result["required_role"],
                 status="Pending Approval",
-                reason=f"Customer requested counter-offer discount of {proposed_discount}% (Threshold: {tier_max}%)"
+                reason="; ".join(eval_result["reasons"])
             )
             db.add(approval)
         else:
             quote.status = "Under Negotiation"
-
-        quote.customer_proposed_discount = disc_dec
-        quote.updated_at = datetime.utcnow()
 
         db.commit()
         return {
             "success": True,
             "message": "Counter offer submitted successfully and logged to negotiation history",
             "status": quote.status,
-            "proposedAmount": float(proposed_total)
+            "proposedAmount": float(proposed_total),
+            "approvalRequired": eval_result["is_approval_required"],
+            "marginWithProposedDiscount": float(new_margin)
         }
 
     @staticmethod

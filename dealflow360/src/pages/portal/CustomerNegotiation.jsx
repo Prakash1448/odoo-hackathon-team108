@@ -44,18 +44,49 @@ export function CustomerNegotiation() {
 
   const handleCounter = async () => {
     const val = Number(proposedDiscount);
-    if (isNaN(val) || val <= 0 || val >= 100) {
-      alert("Please enter a valid discount percentage between 1 and 99.");
+    
+    // Validate discount percentage
+    if (isNaN(val) || val <= 0) {
+      alert("Please enter a valid discount percentage (1-99%).");
       return;
     }
-    if (!comment && val <= 0) return;
+    if (val >= 100) {
+      alert("Discount must be less than 100%.");
+      return;
+    }
+    
+    // Message is optional but helpful
+    if (!comment.trim()) {
+      const confirmSubmit = window.confirm(
+        "No message provided. Submit counter-offer with only discount change?"
+      );
+      if (!confirmSubmit) return;
+    }
+    
     setActionLoading(true);
     try {
-      await portalService.submitNegotiation(quote.id, { proposedDiscount: val, comment });
-      alert("Counter offer submitted.");
-      navigate("/portal");
+      console.log("Submitting negotiation:", {
+        quoteId: quote.id,
+        proposedDiscount: val,
+        comment: comment.trim()
+      });
+      
+      const response = await portalService.submitNegotiation(quote.id, {
+        proposedDiscount: val,
+        comment: comment.trim()
+      });
+      
+      console.log("Negotiation response:", response);
+      alert("Counter offer submitted successfully!");
+      
+      // Refresh the quote to show updated status
+      const updated = await portalService.getQuoteById(quote.id);
+      setQuote(updated);
+      setShowCounter(false);
+      
     } catch (err) {
-      alert("Error: " + err.message);
+      console.error("Negotiation submission error:", err);
+      alert("Error submitting counter offer: " + (err.message || err));
     } finally {
       setActionLoading(false);
     }
@@ -104,15 +135,21 @@ export function CustomerNegotiation() {
                           <label className="block text-sm font-medium text-slate-700 mb-1">Requested Discount (%)</label>
                           <input 
                             type="number" 
-                            min={currentDiscount} max="100" 
+                            min="1" 
+                            max="99" 
+                            step="0.1"
                             value={proposedDiscount} 
-                            onChange={(e) => setProposedDiscount(e.target.value)} 
+                            onChange={(e) => setProposedDiscount(parseFloat(e.target.value) || 0)} 
+                            placeholder="e.g., 10"
                             className="w-full p-2 border border-slate-300 rounded focus:border-indigo-500 outline-none"
                           />
+                          <p className="text-xs text-slate-500 mt-1">Enter as a percentage (e.g., 10 for 10%)</p>
                         </div>
                         <div className="flex flex-col justify-end pb-2">
                           <p className="text-sm text-slate-500">Proposed New Total:</p>
-                          <p className="text-lg font-bold text-indigo-600">${proposedPrice.toLocaleString()}</p>
+                          <p className="text-lg font-bold text-indigo-600">
+                            ${proposedPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </p>
                         </div>
                       </div>
 

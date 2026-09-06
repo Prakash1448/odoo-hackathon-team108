@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+from decimal import Decimal
 
 from app.database.session import get_db
 from app.models.quote import Quote
@@ -10,7 +11,7 @@ from app.schemas.billing import InvoiceResponse
 from app.schemas.portal import CounterOfferRequest, OrderRequestCreate
 from app.services.negotiation_service import NegotiationService
 from app.routers.quotes import format_quote_response
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_roles
 from app.models.user import User
 
 router = APIRouter(prefix="/api/portal", tags=["Customer Portal"])
@@ -56,6 +57,54 @@ def submit_negotiation_counter(
         comment=request.comment,
         current_user=current_user
     )
+
+@router.post("/quotes/{id}/negotiate/respond")
+def respond_to_negotiation(
+    id: str,
+    request: CounterOfferRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["sales-rep", "sales-manager", "admin"]))
+):
+    """
+    Sales Rep/Manager can respond to customer negotiations.
+    Adds a message/counter-offer to the negotiation log.
+    """
+    from app.models.quote import Quote
+    from app.models.negotiation import NegotiationLog
+    from datetime import datetime
+    import uuid
+    
+    quote = db.query(Quote).filter(Quote.id == id).first()
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    
+    # Log the sales team response
+    log_entry = NegotiationLog(
+        id=f"neg-{uuid.uuid4().hex[:8]}",
+        quote_id=quote.id,
+        sender_type="Sales",
+        sender_name=current_user.name,
+        message=request.comment,
+        proposed_discount=Decimal(str(request.proposedDiscount)) if request.proposedDiscount else None,
+        proposed_amount=None,
+        created_at=datetime.utcnow()
+    )
+    db.add(log_entry)
+    
+    # Keep quote status as "Under Negotiation" or "Pending Approval"
+    if quote.status not in ["Under Negotiation", "Pending Approval"]:
+        quote.status = "Under Negotiation"
+    
+    quote.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(quote)
+    
+    return {
+        "success": True,
+        "message": "Response added to negotiation history",
+        "status": quote.status,
+        "sender": current_user.name
+    }
 
 @router.post("/quotes/{id}/confirm")
 def confirm_and_accept_quote(
@@ -342,3 +391,78 @@ def get_customer_order_requests(
     ).order_by(Quote.created_at.desc()).all()
     
     return [format_quote_response(q) for q in requests]
+
+
+@router.get("/order-status/{order_id}")
+def get_order_status_with_backorder(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get order fulfillment status including backorder information for the customer.
+    Only customers can access their own orders.
+    """
+    from app.models.order import Order
+    from app.services.fulfillment_service import FulfillmentService
+    
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Verify customer access
+    if current_user.role == "customer":
+        if not (
+            (order.customer.name == current_user.company if order.customer else False) or
+            (order.customer_id == current_user.id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this order"
+            )
+    
+    # Get auto-split to check for backorder
+    try:
+        split_result = FulfillmentService.get_auto_allocation_split(db, order_id)
+        
+        return {
+            "orderId": order_id,
+            "status": order.status,
+            "amount": float(order.amount),
+            "hasBackorder": split_result.get("hasBackorder", False),
+            "backorderItems": split_result.get("backorderItems", []),
+            "message": "Some items are on backorder and will be shipped separately." if split_result.get("hasBackorder") else "All items are in stock and will ship soon.",
+            "createdAt": order.created_at.isoformat() if order.created_at else None,
+            "items": [
+                {
+                    "id": item.id,
+                    "productId": item.product_id,
+                    "productName": item.product.name if item.product else item.product_id,
+                    "quantity": item.quantity,
+                    "unitPrice": float(item.unit_price),
+                    "lineTotal": float(item.line_total)
+                }
+                for item in order.items
+            ]
+        }
+    except Exception as e:
+        return {
+            "orderId": order_id,
+            "status": order.status,
+            "amount": float(order.amount),
+            "hasBackorder": False,
+            "backorderItems": [],
+            "message": "Order status details currently unavailable",
+            "createdAt": order.created_at.isoformat() if order.created_at else None,
+            "items": [
+                {
+                    "id": item.id,
+                    "productId": item.product_id,
+                    "productName": item.product.name if item.product else item.product_id,
+                    "quantity": item.quantity,
+                    "unitPrice": float(item.unit_price),
+                    "lineTotal": float(item.line_total)
+                }
+                for item in order.items
+            ]
+        }

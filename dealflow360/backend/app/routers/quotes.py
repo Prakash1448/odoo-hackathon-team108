@@ -124,3 +124,30 @@ def evaluate_risk_preview(
         "reasons": eval_result["reasons"] or ["Standard pricing rules applied."],
         "action": action
     }
+
+@router.post("/{quote_id}/add-upsell")
+def add_upsell_product_to_quote(
+    quote_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Add a recommended upsell product to an approved/negotiated quote.
+    Recalculates totals and re-evaluates approval if threshold exceeded.
+    Used after manager approves negotiation and upsell recommendations appear.
+    """
+    product_id = payload.get("productId") or payload.get("product_id")
+    quantity = payload.get("quantity", 1)
+
+    if not product_id:
+        raise HTTPException(status_code=400, detail="productId is required")
+
+    result = QuoteService.add_upsell_product_to_quote(db, quote_id, product_id, quantity)
+    quote = db.query(Quote).filter(Quote.id == quote_id).first()
+    
+    return {
+        "success": result["success"],
+        "message": result["message"],
+        "quote": format_quote_response(quote)
+    }

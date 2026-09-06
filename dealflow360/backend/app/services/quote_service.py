@@ -248,3 +248,114 @@ class QuoteService:
         db.commit()
         db.refresh(quote)
         return quote
+
+    @staticmethod
+    def add_upsell_product_to_quote(db: Session, quote_id: str, product_id: str, quantity: int = 1):
+        """
+        Add a recommended upsell product to an existing quote and recalculate totals.
+        Re-evaluates approval if discount/margin changes exceed thresholds.
+        """
+        quote = db.query(Quote).filter(Quote.id == quote_id).first()
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise HTTPException(status_code=400, detail=f"Product not found: {product_id}")
+
+        # Check if product already in quote
+        existing_item = db.query(QuoteItem).filter(
+            QuoteItem.quote_id == quote_id,
+            QuoteItem.product_id == product_id
+        ).first()
+
+        if existing_item:
+            # Update quantity if already exists
+            existing_item.quantity += quantity
+        else:
+            # Add new quote item
+            new_item = QuoteItem(
+                id=f"qi-{uuid.uuid4().hex[:8]}",
+                quote_id=quote_id,
+                product_id=product_id,
+                quantity=quantity,
+                unit_price=Decimal(str(product.price)),
+                unit_cost=Decimal(str(product.cost)),
+                discount=Decimal("0.00"),  # Upsell items inherit quote discount
+                line_subtotal=Decimal(str(product.price)) * Decimal(quantity),
+                line_discount_amount=Decimal("0.00"),
+                line_total=Decimal(str(product.price)) * Decimal(quantity),
+                line_cost=Decimal(str(product.cost)) * Decimal(quantity),
+                line_margin=((Decimal(str(product.price)) - Decimal(str(product.cost))) / Decimal(str(product.price)) * Decimal("100.00")) if product.price > 0 else Decimal("0.00")
+            )
+            db.add(new_item)
+            db.flush()
+
+        # Recalculate all quote totals
+        all_items = db.query(QuoteItem).filter(QuoteItem.quote_id == quote_id).all()
+        calc = QuoteService.calculate_quote_financials(db, all_items, quote.customer.tier if quote.customer else None)
+
+        # Update quote with new calculated values
+        quote.subtotal = calc["subtotal"]
+        quote.discount = calc["avg_discount"]
+        quote.discount_amount = calc["discount_amount"]
+        quote.amount = calc["final_total"]
+        quote.cost = calc["total_cost"]
+        quote.margin = calc["margin_percentage"]
+
+        # Re-evaluate approval rules after adding upsell
+        eval_result = QuoteService.evaluate_approval_rules(
+            db, quote.customer, calc["avg_discount"], calc["margin_percentage"], calc["final_total"]
+        )
+
+        # Update risk based on new evaluation
+        quote.risk = eval_result["risk_level"]
+        quote.risk_score = eval_result["risk_score"]
+
+        # **CRITICAL EDGE CASE**: If quote was approved and upsell changes it beyond threshold, re-submit to approval
+        if quote.status == "Approved" and eval_result["is_approval_required"]:
+            # Quote exceeded threshold after upsell - send back to approval
+            quote.status = "Pending Approval"
+            
+            # Check if approval already exists and update it
+            existing_approval = db.query(Approval).filter(Approval.quote_id == quote_id).first()
+            if existing_approval:
+                existing_approval.status = "Pending Approval"
+                existing_approval.reason = f"Upsell product added. {'; '.join(eval_result['reasons'])}"
+                existing_approval.decided_by_user_id = None
+                existing_approval.decided_at = None
+            else:
+                new_approval = Approval(
+                    id=f"app-{uuid.uuid4().hex[:6]}",
+                    quote_id=quote_id,
+                    requested_by_user_id=quote.owner_user_id,
+                    required_role=eval_result["required_role"],
+                    status="Pending Approval",
+                    reason=f"Upsell product added. {'; '.join(eval_result['reasons'])}"
+                )
+                db.add(new_approval)
+
+        quote.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(quote)
+
+        return {
+            "success": True,
+            "quoteId": quote.id,
+            "newAmount": float(quote.amount),
+            "newMargin": float(quote.margin),
+            "newDiscount": float(quote.discount),
+            "status": quote.status,
+            "approvalRequired": eval_result["is_approval_required"],
+            "message": "Product added to quote and totals recalculated"
+        }
+
+    @staticmethod
+    def dismiss_upsell_recommendation(db: Session, quote_id: str):
+        """
+        Records that a manager/sales rep dismissed upsell recommendations for a quote.
+        This prevents showing same recommendations again (optional feature for future).
+        """
+        # For now, this is a placeholder for future dismissal tracking
+        # Could store dismissal in a separate table if needed
+        return {"success": True, "message": "Recommendation dismissed"}

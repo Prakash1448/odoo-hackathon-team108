@@ -27,6 +27,7 @@ export function QuotationBuilder() {
   const [lines, setLines] = useState([]);
   const [productSearch, setProductSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [manualNotes, setManualNotes] = useState(""); // NEW: Manual notes/comments
   
   const [validationError, setValidationError] = useState("");
   const [aiRecommendations, setAiRecommendations] = useState([]);
@@ -57,6 +58,10 @@ export function QuotationBuilder() {
                 quantity: l.quantity,
                 discount: l.discount || 0,
               })));
+              // Load manual notes if they exist
+              if (existingQuote.notes) {
+                setManualNotes(existingQuote.notes);
+              }
             }
           } catch (err) {
             console.warn("Could not load existing quote:", err.message);
@@ -181,6 +186,7 @@ export function QuotationBuilder() {
         id: isEditing ? id : undefined,
         customerId: selectedCustomer.id,
         discount: summary.avgDiscount,
+        notes: manualNotes, // NEW: Include manual notes
         lines: lines.map(l => ({
           productId: l.product.id,
           quantity: l.quantity,
@@ -282,7 +288,7 @@ export function QuotationBuilder() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+              <CardHeader className="pb-3 border-b border-slate-100">
                 <CardTitle className="text-lg">Quotation Lines</CardTitle>
               </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
@@ -347,6 +353,21 @@ export function QuotationBuilder() {
                     <p className="text-sm">Your quotation is empty. Add products below.</p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <CardTitle className="text-lg">Manual Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <textarea
+                  placeholder="Add internal notes, special terms, or reasons for discount..."
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  className="w-full h-32 p-3 border border-slate-300 rounded-lg text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
+                />
+                <p className="text-xs text-slate-500 mt-2">These notes will be visible to sales managers during approval review.</p>
               </CardContent>
             </Card>
 

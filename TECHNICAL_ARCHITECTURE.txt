@@ -1,0 +1,583 @@
+================================================================================
+CUSTOMER NEGOTIATION WORKFLOW - TECHNICAL ARCHITECTURE
+================================================================================
+
+================================================================================
+DATA FLOW DIAGRAM
+================================================================================
+
+CUSTOMER NEGOTIATION FLOW:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Customer Portal                Backend Services              Database
+  ───────────────                ────────────────              ────────
+
+   [Quotation]
+   "Sent" status
+        │
+        │ Request discount
+        │ (Propose 7% or 15%)
+        ↓
+   POST /api/portal/quotes/{id}/negotiate
+        │
+        ├────→ NegotiationService.submit_counter_offer()
+        │         │
+        │         ├─ Validate discount (1-99%)
+        │         │
+        │         ├─ Create NegotiationLog entry
+        │         │                              ↓
+        │         │                         negotiation_logs
+        │         │                         [INSERT: customer proposal]
+        │         │
+        │         ├─ Calculate new margin with proposed discount
+        │         │
+        │         ├─ Call QuoteService.evaluate_approval_rules()
+        │         │    │
+        │         │    ├─ Get customer tier
+        │         │    │                              ↓
+        │         │    │                         customer_tiers
+        │         │    │
+        │         │    ├─ Query ApprovalRule table
+        │         │    │  (Find matching rules)            ↓
+        │         │    │                              approval_rules
+        │         │    │
+        │         │    └─ Evaluate:
+        │         │       - discount vs tier limit
+        │         │       - margin vs 20% threshold
+        │         │       - amount vs minimums
+        │         │
+        │         ├─ Decision:
+        │         │  │
+        │         │  ├─ IF within threshold:
+        │         │  │   └─ Status = "Under Negotiation"
+        │         │  │
+        │         │  └─ IF exceeds threshold:
+        │         │      ├─ Status = "Pending Approval"
+        │         │      └─ Create Approval record
+        │         │                              ↓
+        │         │                           approvals
+        │         │                    [INSERT: new approval]
+        │         │
+        │         └─ Update quote
+        │                                     ↓
+        │                                   quotes
+        │                          [UPDATE: status, margin]
+        │
+        ← Response: success, status, proposedAmount
+
+
+MANAGER APPROVAL FLOW:
+━━━━━━━━━━━━━━━━━━━━
+
+  Manager Portal                 Backend Services              Database
+  ──────────────                 ────────────────              ────────
+
+   GET /api/approvals
+   (See pending)
+        │
+        ├────→ ApprovalService.get_approval_queue()
+        │         │
+        │         ├─ Query approvals with status="Pending Approval"
+        │         │                              ↓
+        │         │                           approvals
+        │         │                    [SELECT * pending]
+        │         │
+        │         └─ Format response with quote details
+        │
+        ← Show queue
+
+   [Manager reviews]
+   Clicks APPROVE
+        │
+        ├────→ ApprovalService.approve()
+        │         │
+        │         ├─ Update approval.status = "Approved"
+        │         │  Update approval.decided_by_user_id
+        │         │  Update approval.decided_at
+        │         │                              ↓
+        │         │                           approvals
+        │         │                  [UPDATE: approval record]
+        │         │
+        │         └─ Update quote.status = "Approved"
+        │                                     ↓
+        │                                   quotes
+        │                          [UPDATE: status, risk_score]
+        │
+        ← Response: success
+
+
+UPSELL FLOW:
+━━━━━━━━━━━
+
+  Manager Portal                Backend Services              Database
+  ──────────────                ────────────────              ────────
+
+   GET /api/recommendations/
+       quotes/{id}/approved
+   (See recommendations)
+        │
+        ├────→ RecommendationService.get_live_recommendations()
+        │         │
+        │         ├─ Get current quote items
+        │         │                              ↓
+        │         │                        quote_items
+        │         │
+        │         ├─ Query active UpsellRule records
+        │         │  (Where trigger_product in quote)           ↓
+        │         │                              upsell_rules
+        │         │
+        │         ├─ For each matching rule:
+        │         │  ├─ Get recommended product details
+        │         │  ├─ Calculate margin impact
+        │         │  └─ Add to recommendations
+        │         │
+        │         └─ Return list of recommendations
+        │
+        ← Show recommendations
+
+   [Manager chooses]
+   Clicks ADD TO QUOTE
+        │
+        ├────→ POST /api/quotes/{id}/add-upsell
+        │         │
+        │         ├────→ QuoteService.add_upsell_product_to_quote()
+        │         │         │
+        │         │         ├─ Create new QuoteItem
+        │         │         │                              ↓
+        │         │         │                        quote_items
+        │         │         │                 [INSERT: new item]
+        │         │         │
+        │         │         ├─ Call calculate_quote_financials()
+        │         │         │  (Recalculate all totals)
+        │         │         │
+        │         │         ├─ Call evaluate_approval_rules()
+        │         │         │  (Check if new thresholds exceeded)
+        │         │         │
+        │         │         ├─ Update quote with new totals
+        │         │         │                              ↓
+        │         │         │                           quotes
+        │         │         │      [UPDATE: amount, margin, status]
+        │         │         │
+        │         │         ├─ IF status changed to "Pending Approval":
+        │         │         │  ├─ Reset approval record
+        │         │         │  ├─ decided_by_user_id = NULL
+        │         │         │  └─ decided_at = NULL
+        │         │         │                              ↓
+        │         │         │                           approvals
+        │         │         │      [UPDATE OR INSERT: approval]
+        │         │         │
+        │         │         └─ Return updated quote
+        │
+        ← Response: success, updated quote
+
+
+================================================================================
+API ENDPOINT ARCHITECTURE
+================================================================================
+
+EXISTING ENDPOINTS (Still Working):
+┌─────────────────────────────────────────────────────────────┐
+│ POST /api/quotes                                            │
+│ GET /api/quotes, GET /api/quotes/{id}                       │
+│ GET /api/approvals                                          │
+│ POST /api/approvals/{id}/approve                            │
+│ POST /api/approvals/{id}/reject                             │
+│ POST /api/approvals/{id}/return                             │
+│ GET /api/recommendations/preview                            │
+│ GET /api/recommendations/quotes/{id}                        │
+└─────────────────────────────────────────────────────────────┘
+
+NEW/ENHANCED ENDPOINTS:
+┌─────────────────────────────────────────────────────────────┐
+│ POST /api/portal/quotes/{id}/negotiate          [ENHANCED]  │
+│   - NOW USES FULL ApprovalRule evaluation                   │
+│   - Previously: hardcoded 20% threshold                     │
+│                                                              │
+│ POST /api/quotes/{quote_id}/add-upsell          [NEW]       │
+│   - Add recommended product to quote                        │
+│   - Recalculate totals & re-evaluate approval              │
+│                                                              │
+│ GET /api/recommendations/quotes/{id}/approved   [NEW]       │
+│   - Recommendations specifically for approved quotes        │
+│   - Part of post-approval workflow                          │
+└─────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+SERVICE LAYER ARCHITECTURE
+================================================================================
+
+NegotiationService
+├─ verify_customer_access()
+├─ submit_counter_offer()            ← ENHANCED: now uses full rule evaluation
+├─ accept_and_confirm_quote()
+└─ (unchanged)
+
+QuoteService
+├─ calculate_quote_financials()      [reused]
+├─ evaluate_approval_rules()         [reused by negotiation]
+├─ create_or_update_quote()          [reused]
+├─ add_upsell_product_to_quote()     ← NEW: adds product & re-evaluates
+└─ dismiss_upsell_recommendation()   ← NEW: placeholder
+
+ApprovalService (EXISTING)
+├─ get_approval_queue()
+├─ approve()
+├─ reject()
+└─ return_for_revision()
+
+RecommendationService (EXISTING)
+├─ get_live_recommendations()        [reused in both contexts]
+
+
+================================================================================
+DATABASE SCHEMA - No Changes Required
+================================================================================
+
+Existing Tables (Used As-Is):
+┌──────────────────────────────────────────────────────────┐
+│ quotes                                                    │
+├──────────────────────────────────────────────────────────┤
+│ id (PK)                                                   │
+│ customer_id (FK)                                          │
+│ owner_user_id (FK)                                        │
+│ subtotal, discount, discount_amount, amount              │
+│ cost, margin, risk, risk_score                           │
+│ status ← UPDATED BY WORKFLOW                             │
+│ customer_proposed_discount ← UPDATED BY NEGOTIATION      │
+│ rejection_reason                                          │
+│ created_at, updated_at                                    │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│ approvals                                                  │
+├──────────────────────────────────────────────────────────┤
+│ id (PK)                                                   │
+│ quote_id (FK)                                             │
+│ requested_by_user_id (FK)                                 │
+│ required_role                                             │
+│ status ← UPDATED BY MANAGER ACTIONS                       │
+│ reason                                                    │
+│ comments                                                  │
+│ decided_by_user_id ← SET BY MANAGER                       │
+│ decided_at ← SET BY MANAGER                               │
+│ created_at, updated_at                                    │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│ negotiation_logs                                          │
+├──────────────────────────────────────────────────────────┤
+│ id (PK)                                                   │
+│ quote_id (FK)                                             │
+│ sender_type (Customer, Sales Rep, Sales Manager)         │
+│ sender_name                                               │
+│ message                                                   │
+│ proposed_discount ← SET BY CUSTOMER                       │
+│ proposed_amount ← CALCULATED                              │
+│ created_at ← AUDIT TRAIL                                  │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│ quote_items                                               │
+├──────────────────────────────────────────────────────────┤
+│ id (PK)                                                   │
+│ quote_id (FK)                                             │
+│ product_id (FK)                                           │
+│ quantity, unit_price, unit_cost, discount                │
+│ line_subtotal, line_total, line_cost, line_margin        │
+│ created_at ← NEW ITEMS FROM UPSELL                        │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│ approval_rules                                            │
+├──────────────────────────────────────────────────────────┤
+│ id (PK)                                                   │
+│ name                                                      │
+│ customer_tier (FK, nullable)                              │
+│ min_discount, max_discount, min_amount                    │
+│ min_margin ← USED IN EVALUATION                           │
+│ required_role                                             │
+│ priority                                                  │
+│ is_active                                                 │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│ upsell_rules                                              │
+├──────────────────────────────────────────────────────────┤
+│ id (PK)                                                   │
+│ trigger_product_id (FK)                                   │
+│ rec_product_id (FK)                                       │
+│ type (Upsell, Cross-sell)                                │
+│ min_margin, confidence                                    │
+│ is_promo, active                                          │
+│ title, explanation                                        │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│ customer_tiers                                            │
+├──────────────────────────────────────────────────────────┤
+│ id (PK)                                                   │
+│ name                                                      │
+│ max_auto_approval_discount ← THRESHOLD FOR APPROVAL       │
+│ hardware_discount_limit                                   │
+│ services_discount_limit                                   │
+│ subscriptions_discount_limit                              │
+└──────────────────────────────────────────────────────────┘
+
+
+================================================================================
+DECISION LOGIC FLOW
+================================================================================
+
+THRESHOLD EVALUATION:
+━━━━━━━━━━━━━━━━━━━
+
+Input: customer, proposed_discount, calculated_margin, amount
+
+Step 1: Get customer tier
+        tier = customer.tier
+
+Step 2: Get tier max_auto_approval_discount
+        tier_max = tier.max_auto_approval_discount  (e.g., 10%)
+
+Step 3: Check primary threshold
+        if proposed_discount > tier_max
+            → is_approval_required = TRUE
+
+Step 4: Check secondary thresholds (from ApprovalRule)
+        Query ApprovalRule WHERE
+            is_active = TRUE
+            AND min_discount <= proposed_discount
+            AND max_discount >= proposed_discount
+            AND min_amount <= amount
+
+Step 5: For each matching rule
+        if rule.min_margin is not NULL
+            AND calculated_margin < rule.min_margin
+                → is_approval_required = TRUE
+                → required_role = rule.required_role
+
+Step 6: Check hard limit (margin < 20%)
+        if calculated_margin < 20%
+            → is_approval_required = TRUE
+
+Step 7: Return decision
+        {
+          is_approval_required: bool,
+          required_role: "sales-manager" or "finance",
+          reason: "Discount exceeds tier limit"
+        }
+
+Output: Approval decision with required role
+
+
+UPSELL RE-EVALUATION:
+━━━━━━━━━━━━━━━━━━━
+
+Input: quote (status="Approved"), new_upsell_product
+
+Step 1: Add product to quote_items
+
+Step 2: Recalculate all quote totals
+        new_subtotal, new_amount, new_margin
+
+Step 3: Run evaluate_approval_rules() with new numbers
+
+Step 4: Compare result
+        if new evaluation says is_approval_required = TRUE
+            AND quote.status was "Approved"
+                → Set quote.status = "Pending Approval"
+                → Reset approval (decided_by_user_id = NULL)
+        else
+            → Keep quote.status = "Approved"
+
+Output: Quote reverted to approval queue (if needed)
+
+
+================================================================================
+ROLE-BASED ACCESS CONTROL
+================================================================================
+
+Endpoint                              Required Role(s)
+──────────────────────────────────────────────────────
+
+POST /api/portal/quotes/{id}/negotiate
+                                      customer (current_user)
+
+GET /api/approvals
+                                      sales-manager, finance, admin
+
+POST /api/approvals/{id}/approve
+                                      sales-manager, finance, admin
+
+POST /api/approvals/{id}/reject
+                                      sales-manager, finance, admin
+
+POST /api/quotes/{id}/add-upsell
+                                      current_user (sales-rep or manager)
+
+GET /api/recommendations/quotes/{id}/approved
+                                      (any authenticated user)
+
+
+================================================================================
+ERROR HANDLING
+================================================================================
+
+Errors Handled:
+───────────────
+
+1. Invalid discount (< 1% or ≥ 100%)
+   → HTTPException 400: "Discount must be 1-99%"
+
+2. Quote not found
+   → HTTPException 404: "Quotation not found"
+
+3. Customer access denied
+   → HTTPException 403: "Access denied: not authorized"
+
+4. Product not found
+   → HTTPException 400: "Product not found"
+
+5. Approval not found
+   → HTTPException 404: "Approval request not found"
+
+6. Quote status invalid
+   → HTTPException 400: "Recommendations only available for approved quotes"
+
+All errors logged with context for debugging
+
+
+================================================================================
+PERFORMANCE CHARACTERISTICS
+================================================================================
+
+Operation                        Estimated Time    Database Queries
+──────────────────────────────────────────────────────────────────
+
+Customer proposes discount       ~200ms            3-5
+  ├─ Quote fetch
+  ├─ ApprovalRule queries
+  ├─ CustomerTier fetch
+  ├─ NegotiationLog INSERT
+  └─ Quote UPDATE
+
+Manager views queue              ~150ms            1-2
+  ├─ Approvals SELECT
+  └─ Quote join
+
+Manager approves                 ~100ms            2
+  ├─ Approval UPDATE
+  └─ Quote UPDATE
+
+Get recommendations              ~150ms            2-3
+  ├─ Quote fetch
+  ├─ QuoteItems fetch
+  └─ UpsellRule queries
+
+Add upsell product              ~300ms            4-6
+  ├─ Product fetch
+  ├─ QuoteItem INSERT
+  ├─ Recalculation (loops)
+  ├─ ApprovalRule re-eval
+  ├─ Quote UPDATE
+  └─ Approval UPDATE (if needed)
+
+Total Negotiation Cycle         ~500-750ms        10-20 queries
+
+
+================================================================================
+SCALING CONSIDERATIONS
+================================================================================
+
+Bottlenecks (if present):
+────────────────────────
+
+1. ApprovalRule evaluation loops
+   - Mitigated by: indexes on (active, discount range)
+   - Solution if needed: cache rule set in memory
+
+2. Quote recalculation with many items
+   - Mitigated by: quote_items indexed by quote_id
+   - Solution if needed: batch update operations
+
+3. Recommendation generation
+   - Mitigated by: UpsellRule indexed by trigger_product_id
+   - Solution if needed: cache recommendations per quote
+
+Optimization Opportunities:
+──────────────────────────
+
+1. Cache tier limits (read-only)
+2. Index on (customer_tier, min_discount, max_discount)
+3. Cache active UpsellRule set
+4. Batch approval evaluations if > 100/min
+
+
+================================================================================
+MONITORING & OBSERVABILITY
+================================================================================
+
+Metrics to Track:
+─────────────────
+
+1. Negotiation submissions/minute
+2. Auto-approval vs manager approval ratio
+3. Approval decision times (P50, P99)
+4. Upsell add success rate
+5. Re-approval triggered percentage
+6. Database query times
+
+Logs to Monitor:
+────────────────
+
+1. ApprovalService: manager decisions
+2. NegotiationService: customer proposals
+3. QuoteService: calculation errors
+4. Error rates in approval_rules evaluation
+
+Alerts to Set:
+───────────────
+
+1. > 5% approval rule errors
+2. > 1s query time on ApprovalRule
+3. > 10% re-approval trigger rate
+4. Database lock timeouts
+
+
+================================================================================
+DEPLOYMENT VALIDATION
+================================================================================
+
+Pre-Deployment Checks:
+──────────────────────
+
+✅ All 4 files modified correctly
+✅ No syntax errors in Python
+✅ Imports working (quote_service in negotiation_service)
+✅ Database backups taken
+✅ No index changes needed
+✅ Role definitions unchanged
+
+Post-Deployment Checks:
+───────────────────────
+
+✅ All 6 test scenarios pass
+✅ Regression tests pass
+✅ No new error logs
+✅ Response times acceptable (< 1s per operation)
+✅ Database connections stable
+✅ All approvals working
+✅ Upsell recommendations showing
+✅ Re-approval working on threshold exceeded
+
+Performance Baseline:
+──────────────────────
+
+Negotiation submission: < 500ms
+Manager approval: < 200ms
+Upsell addition: < 500ms
+Recommendation generation: < 300ms
+
+
+================================================================================

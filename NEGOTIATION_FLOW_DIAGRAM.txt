@@ -1,0 +1,291 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║              CUSTOMER NEGOTIATION FEATURE - COMPLETE FLOW DIAGRAM          ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 1: CUSTOMER INITIATES NEGOTIATION                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    CUSTOMER PORTAL
+    ┌──────────────────────────────────────────┐
+    │  Quotations Dashboard                    │
+    │  ├─ Quotation 1: Sent      ✓ View        │
+    │  ├─ Quotation 2: Draft                   │
+    │  └─ Quotation 3: Confirmed               │
+    └──────────────────────────────────────────┘
+                      │
+                      ▼ Click View
+    ┌──────────────────────────────────────────┐
+    │  Quotation Detail Page                   │
+    │  Amount: $50,000 | Status: Sent          │
+    │                                          │
+    │  [Negotiate Terms Button]  [Accept]      │
+    └──────────────────────────────────────────┘
+                      │
+                      ▼ Click "Negotiate Terms"
+    ┌──────────────────────────────────────────┐
+    │  MODAL: Propose Changes                  │
+    │  ┌────────────────────────────────────┐  │
+    │  │ Requested Discount: [15____]  %   │  │
+    │  │ Message: [customer proposal msg] │  │
+    │  │ [Cancel]  [Submit Counter Offer] │  │
+    │  └────────────────────────────────────┘  │
+    └──────────────────────────────────────────┘
+                      │
+                      ▼ Click "Submit"
+            ┌─────────────────────┐
+            │ SEND TO BACKEND:    │
+            │ POST /api/portal/   │
+            │ quotes/{id}/        │
+            │ negotiate           │
+            │ {                   │
+            │  discount: 15,      │
+            │  comment: "..."     │
+            │ }                   │
+            └─────────────────────┘
+                      │
+                      ▼
+            ┌─────────────────────────────────────┐
+            │ BACKEND PROCESSING                  │
+            │ ✓ Validate discount (1-99%)         │
+            │ ✓ Create NegotiationLog entry       │
+            │   - sender_type: "Customer"         │
+            │   - sender_name: "Customer Portal"  │
+            │   - message: customer text          │
+            │   - proposed_discount: 15           │
+            │ ✓ Check if > 20%? No               │
+            │ ✓ Set quote status: "Under         │
+            │   Negotiation"                      │
+            │ ✓ Save to database                  │
+            │ ✓ Return success response           │
+            └─────────────────────────────────────┘
+                      │
+                      ▼
+    ┌──────────────────────────────────────────┐
+    │  CUSTOMER SEES:                          │
+    │  ✓ "Counter offer submitted            │
+    │     successfully!"                       │
+    │  ✓ Timeline updates with their          │
+    │     message showing                      │
+    │  ✓ Quote status: "Under Negotiation"    │
+    └──────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 2: SALES REP VIEWS CUSTOMER NEGOTIATION                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    SALES PORTAL
+    ┌──────────────────────────────────────────┐
+    │  Quotations Dashboard                    │
+    │  Filters: [All] [Draft] [Negotiation ▼]  │
+    │  ┌──────────────────────────────────────┤
+    │  │ Quote ID  | Customer | Status    |   │
+    │  ├──────────────────────────────────────┤
+    │  │ quote-123 | Acme     | Under Neg ▼   │
+    │  │ quote-456 | Tech Inc | Sent      ▼   │
+    │  │ quote-789 | Retail   | Confirmed ▼   │
+    │  └──────────────────────────────────────┘
+    └──────────────────────────────────────────┘
+                      │
+                      ▼ Click View on quote-123
+            ┌─────────────────────────────┐
+            │ GET /api/quotes/{id}        │
+            │ Returns complete quote with │
+            │ negotiationLog array        │
+            └─────────────────────────────┘
+                      │
+                      ▼
+    ┌──────────────────────────────────────────┐
+    │  MODAL: Quote Detail                     │
+    │  Amount: $50,000 | Status: Under Neg     │
+    │                                          │
+    │  ┌─ Negotiation History ──────────────┐  │
+    │  │ Timeline                           │  │
+    │  │ ┌─────────────────────────────────┐│  │
+    │  │ │ Quote Sent                      ││  │
+    │  │ │ 9/6/2026                        ││  │
+    │  │ │ Initial terms provided.         ││  │
+    │  │ └─────────────────────────────────┘│  │
+    │  │ ┌─────────────────────────────────┐│  │
+    │  │ │ Customer Portal                 ││  │
+    │  │ │ 9/6/2026 10:30 AM              ││  │
+    │  │ │ Please consider 15% discount    ││  │
+    │  │ │ Proposed Discount: 15%          ││  │
+    │  │ │ Proposed Amount: $42,500        ││  │
+    │  │ └─────────────────────────────────┘│  │
+    │  └─────────────────────────────────────┘  │
+    │                                          │
+    │  ┌─ Send Response to Customer ────────┐  │
+    │  │ Your Message: [________________]   │  │
+    │  │ Counter Discount % (opt): [__]    │  │
+    │  │ [Cancel] [Send Response]           │  │
+    │  └────────────────────────────────────┘  │
+    └──────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 3: SALES REP RESPONDS TO NEGOTIATION                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    SALES REP (in modal)
+    ┌──────────────────────────────────────────┐
+    │  Fills out response form:                │
+    │  Message: "We can offer 12% discount    │
+    │           for this order"                │
+    │  Counter: 12%                            │
+    │                                          │
+    │  Clicks: [Send Response]                 │
+    └──────────────────────────────────────────┘
+                      │
+                      ▼
+            ┌─────────────────────┐
+            │ SEND TO BACKEND:    │
+            │ POST /api/portal/   │
+            │ quotes/{id}/        │
+            │ negotiate/respond   │
+            │ {                   │
+            │  comment: "We can   │
+            │   offer 12%...",    │
+            │  proposedDiscount:  │
+            │   12                │
+            │ }                   │
+            └─────────────────────┘
+                      │
+                      ▼
+            ┌─────────────────────────────────────┐
+            │ BACKEND PROCESSING                  │
+            │ ✓ Validate authentication           │
+            │   (sales-rep role required)         │
+            │ ✓ Find quote by ID                  │
+            │ ✓ Create NegotiationLog entry       │
+            │   - sender_type: "Sales"            │
+            │   - sender_name: "John Smith"       │
+            │   - message: sales rep text         │
+            │   - proposed_discount: 12           │
+            │ ✓ Keep quote status unchanged       │
+            │   (stays "Under Negotiation")       │
+            │ ✓ Save to database                  │
+            │ ✓ Return success response           │
+            └─────────────────────────────────────┘
+                      │
+                      ▼
+    ┌──────────────────────────────────────────┐
+    │  SALES REP SEES:                         │
+    │  ✓ "Response added to negotiation       │
+    │     history"                             │
+    │  ✓ Modal refreshes automatically         │
+    │  ✓ Response appears in timeline         │
+    │     BELOW customer's message             │
+    └──────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 4: CUSTOMER SEES SALES REP RESPONSE                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    CUSTOMER PORTAL
+    (Customer logs back in / refreshes page)
+    ┌──────────────────────────────────────────┐
+    │  Same Quotation View                     │
+    │  Quotation Detail with Timeline          │
+    └──────────────────────────────────────────┘
+                      │
+                      ▼
+            ┌─────────────────────┐
+            │ GET /api/portal/    │
+            │ quotes/{id}         │
+            │                     │
+            │ Returns quote with  │
+            │ negotiationLog      │
+            │ (all messages!)     │
+            └─────────────────────┘
+                      │
+                      ▼
+    ┌──────────────────────────────────────────┐
+    │  NEGOTIATION TIMELINE (Sidebar)          │
+    │  ┌────────────────────────────────────┐  │
+    │  │ ◆ Quote Sent                       │  │
+    │  │   9/6/2026                         │  │
+    │  │   Initial terms provided.          │  │
+    │  │                                    │  │
+    │  │ ◆ Customer Portal                  │  │
+    │  │   9/6/2026 10:30 AM               │  │
+    │  │   Please consider 15% discount     │  │
+    │  │   Proposed Discount: 15%           │  │
+    │  │                                    │  │
+    │  │ ◆ John Smith                       │  │  ← SALES REP RESPONSE!
+    │  │   9/6/2026 10:45 AM               │  │
+    │  │   We can offer 12% discount for    │  │
+    │  │   this order                       │  │
+    │  │   Proposed Discount: 12%           │  │
+    │  └────────────────────────────────────┘  │
+    └──────────────────────────────────────────┘
+                      │
+                      ▼
+    ┌──────────────────────────────────────────┐
+    │  CUSTOMER CAN:                           │
+    │  ✓ See complete negotiation history      │
+    │  ✓ Continue negotiating if desired       │
+    │  ✓ Accept the counter-offer              │
+    │  ✓ Make another counter-proposal         │
+    └──────────────────────────────────────────┘
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         DATABASE PERSISTENCE                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+NegotiationLog Table:
+
+ID              | Quote_ID     | Sender_Type | Sender_Name     | Message
+────────────────┼──────────────┼─────────────┼─────────────────┼──────────────
+neg-a1b2c3d4    | quote-123    | Customer    | Customer Portal | Please consider
+                |              |             |                 | 15% discount...
+────────────────┼──────────────┼─────────────┼─────────────────┼──────────────
+neg-e5f6g7h8    | quote-123    | Sales       | John Smith      | We can offer
+                |              |             |                 | 12% discount...
+────────────────┼──────────────┼─────────────┼─────────────────┼──────────────
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         API CALL SEQUENCE                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+1. Customer proposes discount:
+   POST /api/portal/quotes/quote-123/negotiate
+   {proposedDiscount: 15, comment: "..."}
+   → Creates NegotiationLog (sender_type: "Customer")
+
+2. Sales Rep fetches quote:
+   GET /api/quotes/quote-123
+   → Returns quote with negotiationLog array
+
+3. Sales Rep responds:
+   POST /api/portal/quotes/quote-123/negotiate/respond
+   {comment: "We can offer 12%", proposedDiscount: 12}
+   → Creates NegotiationLog (sender_type: "Sales")
+
+4. Customer fetches quote:
+   GET /api/portal/quotes/quote-123
+   → Returns quote with ALL negotiationLog entries
+   → Frontend displays complete timeline
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         KEY FEATURES                                      ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✓ Two-way messaging (customer ↔ sales rep)
+✓ Real-time timeline visible to both parties
+✓ Complete audit trail (who said what when)
+✓ Automatic approval trigger (discount > 20%)
+✓ Message persistence in database
+✓ Timestamped entries
+✓ Secure access control (can only see own quotes)
+✓ Role-based response capability (sales-rep/manager only)
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    STATUS: ✅ COMPLETE & WORKING                          ║
+╚════════════════════════════════════════════════════════════════════════════╝

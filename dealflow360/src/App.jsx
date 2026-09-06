@@ -68,36 +68,36 @@ function App() {
                 </RoleBasedRoute>
               } />
               <Route path="sales/pipeline" element={
-                <RoleBasedRoute allowedRoles={["sales-rep", "admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "admin"]}>
                   <Pipeline />
                 </RoleBasedRoute>
               } />
               
               {/* Operations */}
               <Route path="operations/fulfillment" element={
-                <RoleBasedRoute allowedRoles={["sales-rep", "finance", "admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin"]}>
                   <FulfillmentList />
                 </RoleBasedRoute>
               } />
               <Route path="operations/fulfillment/:id" element={
-                <RoleBasedRoute allowedRoles={["sales-rep", "finance", "admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin"]}>
                   <FulfillmentDetail />
                 </RoleBasedRoute>
               } />
               <Route path="operations/billing" element={
-                <RoleBasedRoute allowedRoles={["sales-rep", "finance", "admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin"]}>
                   <SubscriptionsList />
                 </RoleBasedRoute>
               } />
               
               {/* Invoices */}
               <Route path="invoices" element={
-                <RoleBasedRoute allowedRoles={["sales-rep", "finance", "admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin"]}>
                   <InvoicesList />
                 </RoleBasedRoute>
               } />
               <Route path="invoices/:id" element={
-                <RoleBasedRoute allowedRoles={["sales-rep", "finance", "admin", "customer"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin"]}>
                   <InvoiceDetail />
                 </RoleBasedRoute>
               } />
@@ -109,53 +109,53 @@ function App() {
                 </RoleBasedRoute>
               } />
               <Route path="analytics/reports" element={
-                <RoleBasedRoute allowedRoles={["sales-manager", "admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "admin"]}>
                   <Reports />
                 </RoleBasedRoute>
               } />
               
               {/* Approvals */}
               <Route path="approvals" element={
-                <RoleBasedRoute allowedRoles={["sales-manager", "finance", "admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "finance", "admin"]}>
                   <ApprovalQueue />
                 </RoleBasedRoute>
               } />
               
               {/* Customer Portal */}
               <Route path="portal" element={
-                <RoleBasedRoute allowedRoles={["customer"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "customer"]}>
                   <CustomerDashboard />
                 </RoleBasedRoute>
               } />
               <Route path="portal/negotiate/:id" element={
-                <RoleBasedRoute allowedRoles={["customer"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "customer"]}>
                   <CustomerNegotiation />
                 </RoleBasedRoute>
               } />
               <Route path="portal/invoices" element={
-                <RoleBasedRoute allowedRoles={["customer"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "customer"]}>
                   <CustomerInvoicesList />
                 </RoleBasedRoute>
               } />
               <Route path="portal/requests/create" element={
-                <RoleBasedRoute allowedRoles={["customer"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "customer"]}>
                   <CustomerOrderRequest />
                 </RoleBasedRoute>
               } />
 
               {/* Administration */}
               <Route path="admin/upsell-rules" element={
-                <RoleBasedRoute allowedRoles={["admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "admin"]}>
                   <UpsellRules />
                 </RoleBasedRoute>
               } />
               <Route path="admin/settings" element={
-                <RoleBasedRoute allowedRoles={["admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "admin"]}>
                   <AdminSettings />
                 </RoleBasedRoute>
               } />
               <Route path="admin/users" element={
-                <RoleBasedRoute allowedRoles={["admin"]}>
+                <RoleBasedRoute allowedRoles={["sales-rep", "sales-manager", "admin"]}>
                   <Users />
                 </RoleBasedRoute>
               } />
